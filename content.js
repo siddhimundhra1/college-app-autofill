@@ -31,11 +31,19 @@ function readVisibleSection() {
     const id = el.id || el.name || autoId(el);
     if (!el.id) el.dataset.ucAutofillId = id; // tag it so we can find it again later
 
-    fields.push({
+    const field = {
       id,
       label: getLabelFor(el),
       type: el.tagName === 'SELECT' ? 'select' : el.type || 'text',
-    });
+    };
+
+    if (el.tagName === 'SELECT') {
+      field.options = Array.from(el.options)
+        .filter((opt) => opt.value !== '') // skip empty/placeholder options
+        .map((opt) => ({ value: opt.value, text: opt.textContent.trim() }));
+    }
+
+    fields.push(field);
   });
   return { fields };
 }
@@ -74,8 +82,8 @@ function findElementById(id) {
 
 function applyValues(values) {
   Object.entries(values).forEach(([id, value]) => {
-    if (value === null || value === undefined) {
-      log(`Skipped "${id}": model returned null`);
+    if (value === null || value === undefined || String(value).trim() === '') {
+      log(`Skipped "${id}": model returned no value`);
       return;
     }
     const el = findElementById(id);
@@ -92,15 +100,31 @@ function applyValues(values) {
 // ignore a plain `el.value = x` assignment. This uses the native setter so
 // the framework's change listener actually fires.
 function setNativeValue(el, value) {
-  const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
-  const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-
-  if (el.tagName === 'SELECT') {
-    el.value = value;
+  if (el.type === 'checkbox' || el.type === 'radio') {
+    const shouldCheck = ['true', 'yes', '1', 'checked'].includes(String(value).toLowerCase());
+    const nativeCheckedSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'checked')?.set;
+    if (nativeCheckedSetter) {
+      nativeCheckedSetter.call(el, shouldCheck);
+    } else {
+      el.checked = shouldCheck;
+    }
+    el.dispatchEvent(new Event('click', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
     return;
   }
 
+  if (el.tagName === 'SELECT') {
+    el.value = value;
+    if (el.value !== value) {
+      log(`WARNING: select "${el.id || el.name}" did not accept value "${value}" — no matching <option>. Selection left unchanged.`);
+      return;
+    }
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return;
+  }
+
+  const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+  const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
   if (nativeSetter) {
     nativeSetter.call(el, value);
   } else {

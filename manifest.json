@@ -3,7 +3,7 @@
   "name": "UC App Autofill",
   "version": "0.1.0",
   "description": "Fills the UC application from a saved applicant profile using Gemma 4.",
-  "permissions": ["storage", "activeTab", "scripting"],
+  "permissions": ["storage", "activeTab", "scripting", "sidePanel"],
   "host_permissions": [
     "https://apply.universityofcalifornia.edu/*",
     "https://generativelanguage.googleapis.com/*"
@@ -11,8 +11,13 @@
   "background": {
     "service_worker": "background.js"
   },
-  "action": {
-    "default_popup": "popup.html"
+  "action": {},
+  "side_panel": {
+    "default_path": "popup.html"
+  },
+  "options_ui": {
+    "page": "profile.html",
+    "open_in_tab": true
   },
   "content_scripts": [
     {

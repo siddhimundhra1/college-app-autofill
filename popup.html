@@ -3,39 +3,94 @@
 <head>
   <meta charset="utf-8" />
   <style>
-    body { font-family: system-ui, sans-serif; width: 320px; padding: 12px; }
+    body { font-family: system-ui, sans-serif; width: 100%; box-sizing: border-box; padding: 12px; }
     h3 { margin: 0 0 8px; font-size: 15px; }
     label { display: block; font-size: 12px; color: #444; margin-top: 8px; }
     input, textarea { width: 100%; box-sizing: border-box; padding: 6px; font-size: 13px; }
     textarea { height: 60px; resize: vertical; }
     button { width: 100%; margin-top: 12px; padding: 8px; font-size: 13px; cursor: pointer; }
     #status { margin-top: 8px; font-size: 12px; color: #666; }
+    #log {
+      margin-top: 10px;
+      max-height: 160px;
+      overflow-y: auto;
+      background: #111;
+      color: #9cff9c;
+      font-family: 'SF Mono', Menlo, monospace;
+      font-size: 10.5px;
+      padding: 6px;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    #log .err { color: #ff8080; }
+    #summary {
+      margin-top: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 6px;
+      font-size: 11.5px;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    #summary table { width: 100%; border-collapse: collapse; }
+    #summary td { padding: 3px 4px; vertical-align: top; border-bottom: 1px solid #eee; }
+    #summary td.label { color: #555; width: 40%; }
+    #summary td.value { font-family: 'SF Mono', Menlo, monospace; }
+    #summary .skipped { color: #b00; font-style: italic; }
+    .manual-fill-row { display: flex; gap: 4px; align-items: center; }
+    .manual-fill-row input {
+      flex: 1;
+      padding: 3px 5px;
+      font-size: 11px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+    }
+    .manual-fill-row button {
+      width: auto;
+      margin-top: 0;
+      padding: 3px 8px;
+      font-size: 11px;
+    }
+    .manual-fill-row .cancel-btn {
+      background: none;
+      border: 1px solid #ccc;
+    }
+    .saved-note { color: #2a7d2a; font-size: 10.5px; margin-top: 2px; }
+    .filled-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .filled-row .value-text { flex: 1; word-break: break-word; }
+    .edit-btn {
+      width: auto;
+      margin-top: 0;
+      padding: 1px 6px;
+      font-size: 11px;
+      line-height: 1.4;
+      background: none;
+      border: 1px solid #5f5b5b;
+      border-radius: 3px;
+      color: #555;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .edit-btn:hover { background: #f0f0f0; }
   </style>
 </head>
 <body>
-  <h3>Applicant Profile</h3>
+  <h3>UC Autofill</h3>
 
-  <label>Full name</label>
-  <input id="fullName" placeholder="Jane A. Doe" />
-
-  <label>High school</label>
-  <input id="highSchool" placeholder="Lincoln High School" />
-
-  <label>GPA (unweighted)</label>
-  <input id="gpa" placeholder="3.85" />
-
-  <label>Activities (one per line: name | role | hours/wk | years)</label>
-  <textarea id="activities" placeholder="Robotics Club | Team Captain | 8 | 2"></textarea>
-
-  <label>PIQ #1 draft (paste your finished answer)</label>
-  <textarea id="piq1"></textarea>
-
-  <label>Google AI Studio API key</label>
-  <input id="apiKey" type="password" placeholder="AIza..." />
-
-  <button id="saveBtn">Save Profile</button>
+  <button id="editProfileBtn" style="background:#fff;">Edit Profile &amp; Resume</button>
   <button id="fillBtn">Fill Current Section</button>
+  <button id="clearLogBtn" style="background:none;border:1px solid #ccc;">Clear Log</button>
   <div id="status"></div>
+  <div id="summary"></div>
+
+  <h3 style="margin-top:14px;">Log</h3>
+  <div id="log"></div>
 
   <script src="popup.js"></script>
 </body>
