@@ -1,0 +1,52 @@
+Mission Bay High School
+School Name: Mission Bay High School
+Cumulative GPA: 3.92 / 4.0
+
+9th Grade Fall
+English 9 Honors - A
+Algebra II - A-
+Biology - A
+Spanish II - A
+World History - B+
+
+9th Grade Spring
+English 9 Honors - A
+Algebra II - A
+Biology - A
+Spanish II - A-
+World History - A-
+
+10th Grade Fall
+AP Biology - A
+Geometry Honors - A-
+Chemistry Honors - A
+Spanish III - A
+Health Science Seminar - A
+
+10th Grade Spring
+AP Biology - A
+Geometry Honors - A
+Chemistry Honors - A-
+Spanish III - A
+Public Health Research Methods - A
+
+11th Grade Fall
+AP English Language - A-
+Precalculus Honors - A
+AP Chemistry - B+
+Data Science Foundations - A
+United States History - A
+
+11th Grade Spring
+AP English Language - A
+Precalculus Honors - A-
+AP Chemistry - A-
+Data Science Foundations - A
+United States History - A-
+
+12th Grade Fall
+AP Statistics - A
+AP Environmental Science - A-
+AP Government - A
+Computer Science Principles - A
+Medical Spanish - A
