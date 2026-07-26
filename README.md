@@ -36,8 +36,9 @@ This project is built for hackathon/demo use. Use only fictional sample data whi
 1. Open Chrome and go to `chrome://extensions`.
 2. Turn on Developer mode.
 3. Click Load unpacked.
-4. Select this folder:
+4. Select the folder where you saved the repo:
 
+- Example
 ```text
 C:\Kalpita\college-app-autofill
 ```
