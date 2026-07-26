@@ -1,6 +1,12 @@
 const GEMMA_MODEL = 'gemma-4-31b-it';
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMMA_MODEL}:generateContent`;
 
+// Make clicking the toolbar icon open the side panel (docked, stays open on
+// outside clicks) instead of the old transient popup.
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch((err) => {
+  console.error('[UC-Autofill:bg] Failed to set side panel behavior:', err);
+});
+
 const LOG_PREFIX = '[UC-Autofill:bg]';
 
 function log(...args) {
@@ -42,16 +48,31 @@ async function handleFillSection(sectionInfo) {
   const result = await callGemmaWithRetry(prompt, apiKey, schema);
   log('Raw model response:', result);
 
-  return parseModelJson(result);
+  const parsed = parseModelJson(result);
+  // Convert the schema-required sentinel back into a real null.
+  Object.keys(parsed).forEach((key) => {
+    if (parsed[key] === NO_MATCH_SENTINEL) parsed[key] = null;
+  });
+  return parsed;
 }
 
-// Constrains the model's output to an object with EXACTLY these keys, each a
-// nullable string. This is enforced at decoding time, not just by prompting —
-// much stronger than asking nicely.
+// Constrains the model's output to an object with EXACTLY these keys. Select
+// fields get an `enum` of their real <option> values, so the model can only
+// ever pick something that actually exists in the dropdown — it cannot
+// hallucinate an option, and case/wording mismatches become impossible.
+const NO_MATCH_SENTINEL = 'NO_MATCHING_OPTION';
+
 function buildResponseSchema(fields) {
   const properties = {};
   fields.forEach((f) => {
-    properties[f.id] = { type: 'STRING', nullable: true };
+    if (f.type === 'select' && Array.isArray(f.options) && f.options.length) {
+      properties[f.id] = {
+        type: 'STRING',
+        enum: [...f.options.map((o) => o.value), NO_MATCH_SENTINEL],
+      };
+    } else {
+      properties[f.id] = { type: 'STRING', nullable: true };
+    }
   });
   return {
     type: 'OBJECT',
@@ -66,12 +87,29 @@ function buildPrompt(profile, sectionInfo) {
 Applicant profile (JSON):
 ${JSON.stringify(profile, null, 2)}
 
+Note: profile.customFields (if present) contains answers the applicant provided
+previously for fields that didn't fit the standard profile shape — check it for
+matches the same way you'd check any other part of the profile.
+
 Form fields on screen right now (JSON):
 ${JSON.stringify(sectionInfo.fields, null, 2)}
 
 For each field, use its "label" to figure out which piece of profile data it wants,
-then provide that value. If no profile data matches a field, use null for that field —
-do not invent values.`;
+then provide that value.
+
+Some fields include an "options" list (these are dropdowns). For those fields you
+MUST output one of the given option "value" strings exactly as written — never the
+display "text", never a value you invent. If none of the options genuinely fit,
+output "${NO_MATCH_SENTINEL}" for that field.
+
+You may use reasonable judgment to classify/categorize using the profile data —
+for example, matching an activity's name/role to the closest fitting dropdown
+category is fine, since you're choosing among the given closed set of options,
+not inventing new facts. This is different from making up information that isn't
+in the profile at all (e.g. never invent a GPA, an essay detail, or an activity
+that wasn't listed) — leave those null instead.
+
+If no profile data matches a non-dropdown field, use null for that field.`;
 }
 
 async function callGemmaWithRetry(prompt, apiKey, schema, attempt = 0) {

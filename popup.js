@@ -1,9 +1,194 @@
 const $ = (id) => document.getElementById(id);
 const statusEl = $('status');
+const logEl = $('log');
 
 function setStatus(msg) {
   statusEl.textContent = msg;
 }
+
+function appendLog(source, line, isError = false) {
+  const time = new Date().toLocaleTimeString();
+  const div = document.createElement('div');
+  if (isError) div.className = 'err';
+  div.textContent = `[${time}] (${source}) ${line}`;
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+const summaryEl = $('summary');
+
+// Track the most recent section/values in memory so manual-fill actions
+// know what they're updating without re-fetching from storage each time.
+let currentSectionInfo = null;
+let currentValues = null;
+
+// IDs of fields whose row is currently showing the edit input instead of
+// static text. Cleared on save/cancel; not persisted (resets on reopen).
+const editingFields = new Set();
+
+function renderSummary(sectionInfo, values) {
+  currentSectionInfo = sectionInfo;
+  currentValues = values;
+
+  const fieldById = {};
+  sectionInfo.fields.forEach((f) => {
+    fieldById[f.id] = f;
+  });
+
+  const rows = Object.keys(values)
+    .map((id) => {
+      const value = values[id];
+      const field = fieldById[id] || { label: id, type: 'text' };
+      const label = field.label || id;
+      const isSkipped = value === null || value === undefined;
+      const isEditing = editingFields.has(id);
+
+      if (isSkipped || isEditing) {
+        const existing = isSkipped ? '' : escapeHtml(String(value));
+        return `
+          <tr>
+            <td class="label">${escapeHtml(label)}</td>
+            <td class="value ${isSkipped ? 'skipped' : ''}">
+              <div class="manual-fill-row">
+                <input type="text" data-manual-input="${escapeHtml(id)}" placeholder="type the answer..." value="${existing}" />
+                <button data-manual-save="${escapeHtml(id)}">Save</button>
+                ${isEditing ? `<button data-manual-cancel="${escapeHtml(id)}" class="cancel-btn">Cancel</button>` : ''}
+              </div>
+            </td>
+          </tr>`;
+      }
+      return `
+        <tr>
+          <td class="label">${escapeHtml(label)}</td>
+          <td class="value">
+            <div class="filled-row">
+              <span class="value-text">${escapeHtml(String(value))}</span>
+              <button data-manual-edit="${escapeHtml(id)}" class="edit-btn" title="Edit">&#9998;</button>
+            </div>
+          </td>
+        </tr>`;
+    })
+    .join('');
+
+  const filledCount = Object.values(values).filter((v) => v !== null && v !== undefined).length;
+  const totalCount = Object.keys(values).length;
+
+  summaryEl.innerHTML = `
+    <div style="margin-bottom:4px;"><strong>${filledCount}/${totalCount} fields filled</strong></div>
+    <table>${rows}</table>
+  `;
+}
+
+// Event delegation: the summary table gets rebuilt on every render, so we
+// attach one listener to the container instead of per-button.
+summaryEl.addEventListener('click', (e) => {
+  const saveBtn = e.target.closest('[data-manual-save]');
+  if (saveBtn) {
+    const fieldId = saveBtn.getAttribute('data-manual-save');
+    const input = summaryEl.querySelector(`[data-manual-input="${CSS.escape(fieldId)}"]`);
+    const value = input?.value?.trim();
+    if (!value) return;
+    editingFields.delete(fieldId);
+    handleManualFill(fieldId, value);
+    return;
+  }
+
+  const editBtn = e.target.closest('[data-manual-edit]');
+  if (editBtn) {
+    const fieldId = editBtn.getAttribute('data-manual-edit');
+    editingFields.add(fieldId);
+    renderSummary(currentSectionInfo, currentValues);
+    summaryEl.querySelector(`[data-manual-input="${CSS.escape(fieldId)}"]`)?.focus();
+    return;
+  }
+
+  const cancelBtn = e.target.closest('[data-manual-cancel]');
+  if (cancelBtn) {
+    const fieldId = cancelBtn.getAttribute('data-manual-cancel');
+    editingFields.delete(fieldId);
+    renderSummary(currentSectionInfo, currentValues);
+  }
+});
+
+// Let Enter submit the edit input without reaching for the Save button.
+summaryEl.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const input = e.target.closest('[data-manual-input]');
+  if (!input) return;
+  const fieldId = input.getAttribute('data-manual-input');
+  const saveBtn = summaryEl.querySelector(`[data-manual-save="${CSS.escape(fieldId)}"]`);
+  saveBtn?.click();
+});
+
+async function handleManualFill(fieldId, value) {
+  if (!currentSectionInfo) return;
+  const field = currentSectionInfo.fields.find((f) => f.id === fieldId) || { label: fieldId, type: 'text' };
+
+  // 1. Apply immediately to the live page.
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab) {
+    chrome.tabs.sendMessage(tab.id, { type: 'APPLY_VALUES', values: { [fieldId]: value } });
+  }
+
+  // 2. Save into the profile under a readable key so future fills
+  // (any section, any field) can draw on this answer automatically —
+  // the whole profile object gets sent to Gemma as context every time.
+  const slug = slugify(field.label || fieldId);
+  chrome.storage.local.get(['profile'], ({ profile }) => {
+    const updatedProfile = { ...(profile || {}) };
+    updatedProfile.customFields = { ...(updatedProfile.customFields || {}) };
+    updatedProfile.customFields[slug] = value;
+    chrome.storage.local.set({ profile: updatedProfile }, () => {
+      appendLog('popup', `Saved "${field.label}" = "${value}" to profile.customFields.${slug}`);
+    });
+  });
+
+  // 3. Update the in-memory result and re-render so this row shows as filled.
+  currentValues = { ...currentValues, [fieldId]: value };
+  renderSummary(currentSectionInfo, currentValues);
+  chrome.storage.local.set({ lastSectionInfo: currentSectionInfo, lastValues: currentValues });
+}
+
+function slugify(str) {
+  return String(str)
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'field';
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+chrome.storage.local.get(['lastSectionInfo', 'lastValues'], ({ lastSectionInfo, lastValues }) => {
+  if (lastSectionInfo && lastValues) renderSummary(lastSectionInfo, lastValues);
+});
+
+chrome.storage.local.get(['logLines'], ({ logLines }) => {
+  (logLines || []).forEach((l) => appendLog(l.source, l.line, l.isError));
+});
+
+// Live log lines from background.js / content.js while the popup is open.
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === 'LOG') {
+    const isError = /error/i.test(message.line);
+    appendLog(message.source, message.line, isError);
+    // Persist so logs survive popup close/reopen.
+    chrome.storage.local.get(['logLines'], ({ logLines }) => {
+      const updated = [...(logLines || []), { ...message, isError }].slice(-200);
+      chrome.storage.local.set({ logLines: updated });
+    });
+  }
+});
+
+$('clearLogBtn').addEventListener('click', () => {
+  logEl.innerHTML = '';
+  summaryEl.innerHTML = '';
+  chrome.storage.local.set({ logLines: [], lastSectionInfo: null, lastValues: null });
+});
 
 // Load any previously saved profile into the form
 chrome.storage.local.get(['profile', 'apiKey'], ({ profile, apiKey }) => {
@@ -73,7 +258,9 @@ $('fillBtn').addEventListener('click', async () => {
           type: 'APPLY_VALUES',
           values: response.values,
         });
-        setStatus('Filled ' + Object.keys(response.values).length + ' fields.');
+        setStatus('Filled ' + Object.keys(response.values).length + ' fields — see breakdown below.');
+        renderSummary(sectionInfo, response.values);
+        chrome.storage.local.set({ lastSectionInfo: sectionInfo, lastValues: response.values });
       }
     );
   });
